@@ -41,6 +41,18 @@ def cmdline_parser():
     )
 
     parser.add_argument(
+        "-n", "--now", help="Last unix timestamp of the interval for requests in seconds (0 means use current timestamp)", required=False, type=int
+    )
+
+    parser.add_argument(
+        "-i", "--interval", help="Time interval in seconds for requests", required=False, type=int
+    )
+
+    parser.add_argument(
+        "-s", "--step", help="Step parameters for requests", required=False, type=int
+    )
+
+    parser.add_argument(
         "-p",
         "--parameters",
         help="Json file containing fix parameters to populate the template with",
@@ -107,11 +119,16 @@ def main():
         time = instant_query['time']
 
         # If time is not defined, we replace it by 'now'
-        if time is None:
-            time = "${__time(/1000)}"
+        if args.now is not None:
+            if args.now == 0:
+                time = "${__time(/1000)}"
+            else:
+                time = args.now
 
         query = convert_query(name, query, parameters)
 
+        if time is None:
+            raise Exception("Failed to create query: {}, one of the following parameter is not set: {{ time: {}}}".format(name, time))
         instant_queries[name] = InstantQuery(query, time)
 
     # Setup instant queries for JMeter
@@ -123,25 +140,25 @@ def main():
         step = range_query['step']
 
         # If start is not defined, we replace it by 'now - interval_s'
-        if start is None:
-            if "interval_s" not in parameters:
-                raise Exception(
-                    "query {} does not provide a start parameter and you did not provide an interval_s parameter."
-                    .format(name))
-            start = "${{__jexl2(${{__time(/1000)}} - {})}}".format(parameters["interval_s"])
+        if args.now is not None:
+            if args.now == 0:
+                end = "${__time(/1000)}"
+            else:
+                end = args.now
 
-        # If end is not defined, we replace it by 'now'
-        if end is None:
-            end = "${__time(/1000)}"
+        if args.interval is not None:
+            if args.now == 0:
+                start = "${{__jexl2(${{__time(/1000)}} - {})}}".format(args.interval)
+            else:
+                start = end - args.interval
 
-        # If step is not defined, we replace it by 'step_s'
-        if step is None:
-            if "step_s" not in parameters:
-                raise Exception("query {} does not provide a step parameter and you did not provide an step_s parameter.".format(name))
-            step = parameters["step_s"]
+        if args.step is not None:
+            step = args.step
 
         query = convert_query(name, query, parameters)
 
+        if start is None or end is None or step is None:
+            raise Exception("Failed to create query: {}, one of the following parameter is not set: {{ start: {}, end: {}, step: {} }}".format(name, end, start, step))
         range_queries[name] = RangeQuery(query, start, end, step)
 
     # Build JMeter test plan using the provided template
