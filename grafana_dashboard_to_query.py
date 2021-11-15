@@ -20,7 +20,7 @@ def find_queries(obj):
                     queries.add_instant_query(InstantQuery(target['expr'], None))
             if obj['type'] == "graph":
                 for target in obj['targets']:
-                    queries.add_range_query(RangeQuery(target['expr'], None, None, None))
+                    queries.add_range_query(RangeQuery(target['expr'], None, None, target['step'] if "step" in target else None))
 
         for _, value in obj.items():
             queries.merge(find_queries(value))
