@@ -6,23 +6,28 @@ This module aims to help extracting grafana dashboard queries into a json file.
 import json
 import argparse
 import logging
-from queries import Queries, RangeQuery
+from queries import InstantQuery, Queries, RangeQuery
 
-def find_expr(obj, key):
+def find_queries(obj):
     """
     This function is used to convert a Grafana dashboard into a Queries object
     """
     queries = Queries({}, {})
-    if key in obj:
-        queries.add_range_query(RangeQuery(query=obj[key], start=None, end=None, step=None))
+    if isinstance(obj, dict):
+        if 'targets' in obj and 'type' in obj:
+            if obj['type'] in [ "gauge", "singlestat" ]:
+                for target in obj['targets']:
+                    queries.add_instant_query(InstantQuery(target['expr'], None))
+            if obj['type'] == "graph":
+                for target in obj['targets']:
+                    queries.add_range_query(RangeQuery(target['expr'], None, None, None))
 
-    for _,value in obj.items():
-        if isinstance(value, dict):
-            queries.merge(find_expr(value, key))
-        if isinstance(value, list):
-            for element in value:
-                if isinstance(element, dict):
-                    queries.merge(find_expr(element, key))
+        for _, value in obj.items():
+            queries.merge(find_queries(value))
+    if isinstance(obj, list):
+        for element in obj:
+            if isinstance(element, dict):
+                queries.merge(find_queries(element))
 
     return queries
 
@@ -80,7 +85,7 @@ def main():
     queries = Queries({}, {})
     with open(args.grafana_dashboard, 'r', encoding='utf8') as dashboard_file:
         dashboard = json.load(dashboard_file)
-        queries = find_expr(dashboard, 'expr')
+        queries = find_queries(dashboard)
 
     # Save queries into provided file
     with open(args.requests, 'w', encoding='utf8') as requests_file:
